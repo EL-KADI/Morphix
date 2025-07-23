@@ -1,23 +1,42 @@
-"use client"
+"use client";
 
-import { useState, useCallback } from "react"
-import { motion } from "framer-motion"
-import { Upload, FileImage, Video, Download, Settings, Loader2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Label } from "@/components/ui/label"
-import { Slider } from "@/components/ui/slider"
-import { Badge } from "@/components/ui/badge"
-import { useToast } from "@/hooks/use-toast"
-import { FileUpload } from "@/components/file-upload"
-import { Preview3D } from "@/components/preview-3d"
+import { useState, useCallback } from "react";
+import { motion } from "framer-motion";
+import {
+  Upload,
+  FileImage,
+  Video,
+  Download,
+  Settings,
+  Loader2,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { FileUpload } from "@/components/file-upload";
+import { Preview3D } from "@/components/preview-3d";
 
 type ConversionType = {
-  from: string[]
-  to: string[]
-  type: string
-}
+  from: string[];
+  to: string[];
+  type: string;
+};
 
 const conversions: Record<string, ConversionType> = {
   image: {
@@ -30,40 +49,103 @@ const conversions: Record<string, ConversionType> = {
     to: ["mp4", "avi", "wmv", "webm"],
     type: "video",
   },
-}
+};
+
+const convertImageFormat = async (
+  file: File,
+  outputFormat: string,
+  quality: number
+): Promise<Blob> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+
+      if (!ctx) {
+        reject(new Error("Could not get canvas context"));
+        return;
+      }
+
+      canvas.width = img.width;
+      canvas.height = img.height;
+
+      ctx.drawImage(img, 0, 0);
+
+      let mimeType = "image/jpeg";
+      switch (outputFormat.toLowerCase()) {
+        case "png":
+          mimeType = "image/png";
+          break;
+        case "webp":
+          mimeType = "image/webp";
+          break;
+        case "avif":
+          mimeType = "image/avif";
+          break;
+        case "ico":
+          mimeType = "image/png";
+          break;
+        default:
+          mimeType = "image/jpeg";
+      }
+
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error("Failed to convert image"));
+          }
+        },
+        mimeType,
+        quality / 100
+      );
+    };
+
+    img.onerror = () => {
+      reject(new Error("Failed to load image"));
+    };
+
+    const url = URL.createObjectURL(file);
+    img.src = url;
+  });
+};
 
 export default function ConvertPage() {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [conversionMode, setConversionMode] = useState<string>("")
-  const [outputFormat, setOutputFormat] = useState<string>("")
-  const [quality, setQuality] = useState([80])
-  const [isConverting, setIsConverting] = useState(false)
-  const [convertedFile, setConvertedFile] = useState<string | null>(null)
-  const { toast } = useToast()
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [conversionMode, setConversionMode] = useState<string>("");
+  const [outputFormat, setOutputFormat] = useState<string>("");
+  const [quality, setQuality] = useState([80]);
+  const [isConverting, setIsConverting] = useState(false);
+  const [convertedFile, setConvertedFile] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const handleFileSelect = useCallback((file: File) => {
-    console.log("File selected:", file.name, file.type)
-    setSelectedFile(file)
-    setConvertedFile(null)
-    setOutputFormat("")
+    console.log("File selected:", file.name, file.type);
+    setSelectedFile(file);
+    setConvertedFile(null);
+    setOutputFormat("");
 
-    const fileExtension = file.name.split(".").pop()?.toLowerCase()
+    const fileExtension = file.name.split(".").pop()?.toLowerCase();
     if (fileExtension) {
       for (const [mode, config] of Object.entries(conversions)) {
         if (config.from.includes(fileExtension)) {
-          setConversionMode(mode)
-          break
+          setConversionMode(mode);
+          break;
         }
       }
     }
-  }, [])
+  }, []);
 
   const handleFileRemove = useCallback(() => {
-    setSelectedFile(null)
-    setConversionMode("")
-    setOutputFormat("")
-    setConvertedFile(null)
-  }, [])
+    setSelectedFile(null);
+    setConversionMode("");
+    setOutputFormat("");
+    setConvertedFile(null);
+  }, []);
 
   const handleConvert = async () => {
     if (!selectedFile || !outputFormat) {
@@ -71,21 +153,29 @@ export default function ConvertPage() {
         title: "Missing Information",
         description: "Please select a file and output format",
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
 
-    setIsConverting(true)
+    setIsConverting(true);
 
     try {
-      const conversionTime = selectedFile.type.startsWith("video/") ? 4000 : 2000
-      await new Promise((resolve) => setTimeout(resolve, conversionTime))
+      let convertedBlob: Blob;
 
-      const originalName = selectedFile.name.split(".")[0]
-      const convertedFileName = `${originalName}_converted.${outputFormat}`
-      const convertedBlob = selectedFile
-      const mockUrl = URL.createObjectURL(convertedBlob)
-      setConvertedFile(mockUrl)
+      if (selectedFile.type.startsWith("image/")) {
+        convertedBlob = await convertImageFormat(
+          selectedFile,
+          outputFormat,
+          quality[0]
+        );
+      } else {
+        convertedBlob = selectedFile;
+      }
+
+      const originalName = selectedFile.name.split(".")[0];
+      const convertedFileName = `${originalName}_converted.${outputFormat}`;
+      const mockUrl = URL.createObjectURL(convertedBlob);
+      setConvertedFile(mockUrl);
 
       const conversionData = {
         id: Date.now().toString(),
@@ -94,65 +184,81 @@ export default function ConvertPage() {
         outputFormat,
         quality: quality[0],
         timestamp: new Date().toISOString(),
-        size: selectedFile.size,
+        size: convertedBlob.size,
         originalFormat: selectedFile.name.split(".").pop()?.toLowerCase() || "",
-      }
+      };
 
-      const history = JSON.parse(localStorage.getItem("morphix-history") || "[]")
-      history.unshift(conversionData)
-      localStorage.setItem("morphix-history", JSON.stringify(history.slice(0, 50)))
+      const history = JSON.parse(
+        localStorage.getItem("morphix-history") || "[]"
+      );
+      history.unshift(conversionData);
+      localStorage.setItem(
+        "morphix-history",
+        JSON.stringify(history.slice(0, 50))
+      );
 
       toast({
         title: "Conversion Successful! 🎉",
         description: `File converted from ${conversionData.originalFormat.toUpperCase()} to ${outputFormat.toUpperCase()}`,
-      })
+      });
     } catch (error) {
+      console.error("Conversion error:", error);
       toast({
         title: "Conversion Failed",
         description: "An error occurred during conversion. Please try again.",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsConverting(false)
+      setIsConverting(false);
     }
-  }
+  };
 
   const getFileIcon = (type: string) => {
     switch (type) {
       case "image":
-        return FileImage
+        return FileImage;
       case "video":
-        return Video
+        return Video;
       default:
-        return FileImage
+        return FileImage;
     }
-  }
+  };
 
   const getFileType = (file: File): "image" | "video" => {
-    const extension = file.name.split(".").pop()?.toLowerCase()
+    const extension = file.name.split(".").pop()?.toLowerCase();
 
     if (
       file.type.startsWith("image/") ||
-      ["jpg", "jpeg", "png", "webp", "bmp", "gif", "ico", "avif"].includes(extension || "")
+      ["jpg", "jpeg", "png", "webp", "bmp", "gif", "ico", "avif"].includes(
+        extension || ""
+      )
     ) {
-      return "image"
+      return "image";
     } else if (
       file.type.startsWith("video/") ||
       ["mp4", "avi", "mov", "wmv", "mkv", "webm"].includes(extension || "")
     ) {
-      return "video"
+      return "video";
     }
 
-    return "image"
-  }
+    return "image";
+  };
 
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-4xl mx-auto">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+        >
           <div className="text-center mb-8">
-            <h1 className="text-3xl md:text-4xl font-bold mb-4">Universal File Converter</h1>
-            <p className="text-xl text-muted-foreground">Convert images and videos between formats</p>
+            <h1 className="text-3xl md:text-4xl font-bold mb-4">
+              Universal File Converter
+            </h1>
+            <p className="text-xl text-muted-foreground">
+              Convert images and videos between formats
+            </p>
           </div>
 
           <div className="grid lg:grid-cols-2 gap-8">
@@ -163,10 +269,15 @@ export default function ConvertPage() {
                     <Upload className="h-5 w-5" />
                     <span>Upload File</span>
                   </CardTitle>
-                  <CardDescription>Select an image or video to convert</CardDescription>
+                  <CardDescription>
+                    Select an image or video to convert
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <FileUpload onFileSelect={handleFileSelect} onFileRemove={handleFileRemove} />
+                  <FileUpload
+                    onFileSelect={handleFileSelect}
+                    onFileRemove={handleFileRemove}
+                  />
 
                   {selectedFile && (
                     <motion.div
@@ -181,7 +292,9 @@ export default function ConvertPage() {
                             {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
                           </p>
                         </div>
-                        <Badge variant="secondary">{selectedFile.name.split(".").pop()?.toUpperCase()}</Badge>
+                        <Badge variant="secondary">
+                          {selectedFile.name.split(".").pop()?.toUpperCase()}
+                        </Badge>
                       </div>
                     </motion.div>
                   )}
@@ -189,7 +302,10 @@ export default function ConvertPage() {
               </Card>
 
               {conversionMode && (
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
                   <Card>
                     <CardHeader>
                       <CardTitle className="flex items-center space-x-2">
@@ -200,7 +316,10 @@ export default function ConvertPage() {
                     <CardContent className="space-y-4">
                       <div>
                         <Label htmlFor="output-format">Output Format</Label>
-                        <Select value={outputFormat} onValueChange={setOutputFormat}>
+                        <Select
+                          value={outputFormat}
+                          onValueChange={setOutputFormat}
+                        >
                           <SelectTrigger>
                             <SelectValue placeholder="Select output format" />
                           </SelectTrigger>
@@ -243,15 +362,18 @@ export default function ConvertPage() {
                       </Button>
 
                       {convertedFile && (
-                        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}>
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                        >
                           <Button
                             variant="outline"
                             className="w-full bg-transparent"
                             onClick={() => {
-                              const a = document.createElement("a")
-                              a.href = convertedFile
-                              a.download = `converted.${outputFormat}`
-                              a.click()
+                              const a = document.createElement("a");
+                              a.href = convertedFile;
+                              a.download = `converted.${outputFormat}`;
+                              a.click();
                             }}
                           >
                             <Download className="mr-2 h-4 w-4" />
@@ -269,7 +391,9 @@ export default function ConvertPage() {
               <Card className="h-full">
                 <CardHeader>
                   <CardTitle>File Preview</CardTitle>
-                  <CardDescription>Preview of your uploaded file</CardDescription>
+                  <CardDescription>
+                    Preview of your uploaded file
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="aspect-square bg-muted rounded-lg">
@@ -290,35 +414,51 @@ export default function ConvertPage() {
             transition={{ delay: 0.3 }}
             className="mt-12"
           >
-            <h2 className="text-2xl font-bold mb-6 text-center">Supported Formats</h2>
+            <h2 className="text-2xl font-bold mb-6 text-center">
+              Supported Formats
+            </h2>
             <div className="grid md:grid-cols-2 gap-6">
               {Object.entries(conversions).map(([key, config]) => {
-                const Icon = getFileIcon(config.type)
+                const Icon = getFileIcon(config.type);
                 return (
                   <Card key={key} className="text-center">
                     <CardHeader>
                       <div className="mx-auto p-3 bg-primary/10 rounded-full w-fit">
                         <Icon className="h-6 w-6 text-primary" />
                       </div>
-                      <CardTitle className="capitalize">{key} Conversion</CardTitle>
+                      <CardTitle className="capitalize">
+                        {key} Conversion
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2">
                         <div>
-                          <p className="text-sm font-medium text-muted-foreground">From:</p>
+                          <p className="text-sm font-medium text-muted-foreground">
+                            From:
+                          </p>
                           <div className="flex flex-wrap gap-1 justify-center">
                             {config.from.map((format) => (
-                              <Badge key={format} variant="outline" className="text-xs">
+                              <Badge
+                                key={format}
+                                variant="outline"
+                                className="text-xs"
+                              >
                                 {format.toUpperCase()}
                               </Badge>
                             ))}
                           </div>
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-muted-foreground">To:</p>
+                          <p className="text-sm font-medium text-muted-foreground">
+                            To:
+                          </p>
                           <div className="flex flex-wrap gap-1 justify-center">
                             {config.to.map((format) => (
-                              <Badge key={format} variant="secondary" className="text-xs">
+                              <Badge
+                                key={format}
+                                variant="secondary"
+                                className="text-xs"
+                              >
                                 {format.toUpperCase()}
                               </Badge>
                             ))}
@@ -327,12 +467,12 @@ export default function ConvertPage() {
                       </div>
                     </CardContent>
                   </Card>
-                )
+                );
               })}
             </div>
           </motion.div>
         </motion.div>
       </div>
     </div>
-  )
+  );
 }
